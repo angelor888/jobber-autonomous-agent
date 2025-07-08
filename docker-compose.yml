@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  jobber-agent:
+    build: .
+    container_name: jobber-autonomous-agent
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - JOBBER_CLIENT_ID=${JOBBER_CLIENT_ID}
+      - JOBBER_CLIENT_SECRET=${JOBBER_CLIENT_SECRET}
+      - JOBBER_REDIRECT_URI=${JOBBER_REDIRECT_URI}
+      - BASE_URL=${BASE_URL}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - AUTONOMOUS_MODE=${AUTONOMOUS_MODE:-true}
+      - LEARNING_ENABLED=${LEARNING_ENABLED:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - agent-network
+
+  # Optional: Redis for caching and rate limiting
+  redis:
+    image: redis:alpine
+    container_name: jobber-agent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - agent-network
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: jobber-agent-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  prometheus-data:
